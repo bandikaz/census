@@ -1,8 +1,9 @@
 import pickle,os
 
 from sklearn.linear_model import SGDClassifier
-from sklearn.metrics import roc_curve, auc,classification_report,confusion_matrix,zero_one_score
+from sklearn.metrics import roc_curve, auc,classification_report,confusion_matrix,zero_one_score,f1_score
 from sklearn.feature_extraction import DictVectorizer
+from sklearn.grid_search import GridSearchCV
 import matplotlib.pyplot as plt
 import pandas as pd
 
@@ -35,14 +36,14 @@ class CensusLearner:
         
         if self.reporting:
             print 'Analyze RAW data...'
-            BasicStats(trainset,self.report_dir+'/raw/','target').analyze()
+           #BasicStats(trainset,self.report_dir+'/raw/','target').analyze()
         
         print 'Transform data...'
         preprocessed_trainset = self._transformDataset(trainset)
         
         if self.reporting:
             print 'Analyze transformed data...'
-            BasicStats(preprocessed_trainset,self.report_dir+'/processed/','target').analyze()
+            #BasicStats(preprocessed_trainset,self.report_dir+'/processed/','target').analyze()
         
         print 'Vectorize data...'
         train_as_dicts = [dict(r.iteritems()) for _, r in preprocessed_trainset.drop('target',axis=1).iterrows()]
@@ -52,8 +53,16 @@ class CensusLearner:
         train_labels = preprocessed_trainset['target'].astype(float).values
                 
         print 'Train a model...'
-        self.model = SGDClassifier(penalty='elasticnet',loss='log',alpha=0.00001)
-        self.model.fit(vectorized_trainset,train_labels)
+        
+        param_space = [{'rho':[0.1,0.2,.5,.7,.85,.9],'alpha':[0.00001,0.0001,0.001,0.000001]}]
+        
+        # http://stackoverflow.com/questions/14955458/does-gridsearchcv-use-predict-or-predict-proba-when-using-auc-score-as-score-fu
+        # so I used the f1 score 
+        cv = GridSearchCV(SGDClassifier(loss='log',penalty='elasticnet',shuffle=True,n_iter=5),param_space,score_func=f1_score,n_jobs=3)
+        
+        cv.fit(vectorized_trainset,train_labels)
+        self.model = cv.best_estimator_
+        
         predictions = self.model.predict_proba(vectorized_trainset)
         
         if self.reporting:
